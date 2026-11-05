@@ -1,12 +1,25 @@
 'use strict';
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
+const crypto = require('crypto');
 const { Store } = require('./lib/store');
 const { createAuth, loadSecret } = require('./lib/auth');
 const { bulkAdd } = require('./lib/guests');
 const mail = require('./lib/mail');
 const { createGmail } = require('./lib/gmail');
 const { TOKEN_RE, localToEpoch, newToken, newId, EMAIL_RE, str, csvCell } = require('./lib/util');
+
+// Cloudflare trzyma pliki JS/CSS do 4 godzin, więc HTML odwołuje się do nich z ?v=<skrót treści>.
+function versionedHtml(dir, file) {
+  const html = fs.readFileSync(path.join(dir, file), 'utf8');
+  return html.replace(/(href|src)="\/([\w.-]+\.(?:js|css))"/g, (m, attr, name) => {
+    try {
+      const h = crypto.createHash('sha1').update(fs.readFileSync(path.join(dir, name))).digest('hex').slice(0, 10);
+      return `${attr}="/${name}?v=${h}"`;
+    } catch { return m; }
+  });
+}
 
 function createApp(opts = {}) {
   const env = opts.env || process.env;
@@ -51,11 +64,13 @@ function createApp(opts = {}) {
   };
 
   app.get('/', noStore, (req, res) => res.type('text').send('Studniówka RSVP. Otwórz osobisty link z zaproszenia.'));
-  app.get('/admin', noStore, (req, res) => res.sendFile(path.join(pub, 'admin.html')));
+  const adminHtml = versionedHtml(pub, 'admin.html');
+  const guestHtml = versionedHtml(pub, 'guest.html');
+  app.get('/admin', noStore, (req, res) => res.type('html').send(adminHtml));
   const RESERVED = new Set(['admin', 'api', 'fonts']);
   const guestPage = (req, res, next) => {
     if (!TOKEN_RE.test(req.params.token) || RESERVED.has(req.params.token.toLowerCase())) return next();
-    res.set('Cache-Control', 'no-store').sendFile(path.join(pub, 'guest.html'));
+    res.set('Cache-Control', 'no-store').type('html').send(guestHtml);
   };
   app.get('/r/:token', guestPage);
   app.get('/:token', guestPage);
@@ -316,7 +331,8 @@ function createApp(opts = {}) {
     const to = str(b.to, 200).toLowerCase();
     if (!EMAIL_RE.test(to)) return res.status(400).json({ error: 'Wpisz poprawny adres, na który wysłać test.' });
     const body = typeof b.body === 'string' ? b.body : store.db.settings.mailBody;
-    if (!body.includes('{link}')) return res.status(400).json({ error: REQUIRED_LINK });
+    if (!b.custom && !body.includes('{link}')) return res.status(400).json({ error: REQUIRED_LINK });
+    if (b.custom && (!body.trim() || !str(b.subject, 200))) return res.status(400).json({ error: 'Wpisz temat i treść wiadomości.' });
     // test nigdy nie zawiera prawdziwego linku gościa – kliknięcie w teście nie może potwierdzić za kogoś
     const g = { name: 'Gość testowy', token: 'TestTest' };
     const m = mail.buildMessage(store.db.settings, g, linkFor(req, g), { subject: typeof b.subject === 'string' ? b.subject : null, body });
@@ -333,7 +349,8 @@ function createApp(opts = {}) {
 
   admin.get('/mail/status', (req, res) => res.json(mailState));
 
-  async function runSend(ids, links) {
+  async function runSend(ids, links, build, invite = true) {
+    build = build || ((g) => mail.buildMessage(store.db.settings, g, links.get(g.id)));
     mailState.running = true;
     try {
       for (let i = 0; i < ids.length; i++) {
@@ -342,11 +359,12 @@ function createApp(opts = {}) {
         if (i > 0 && mcfg.delayMs) await sleep(mcfg.delayMs);
         mailState.current = g.name;
         try {
-          await sendOne(g.email.trim().toLowerCase(), g.name, mail.buildMessage(store.db.settings, g, links.get(g.id)));
-          g.sentAt = new Date(now()).toISOString();
-          g.sendError = '';
+          await sendOne(g.email.trim().toLowerCase(), g.name, build(g));
+          if (invite) { g.sentAt = new Date(now()).toISOString(); g.sendError = ''; }
+          else { g.lastMessageAt = new Date(now()).toISOString(); g.lastMessageError = ''; }
         } catch (e) {
-          g.sendError = String(e.message || e).slice(0, 300);
+          if (invite) g.sendError = String(e.message || e).slice(0, 300);
+          else g.lastMessageError = String(e.message || e).slice(0, 300);
           mailState.failed++;
           if (e.code === 'invalid_grant') { mailState.done++; mailState.aborted = e.message; store.save(); break; }
         }
@@ -382,6 +400,34 @@ function createApp(opts = {}) {
     res.status(202).json({ total: pick.length });
   });
 
+
+  // Osobna wiadomość do wybranych gości (np. przypomnienie). Nie zmienia stanu wysyłki zaproszeń.
+  const CUSTOM_MAX = 50;
+  admin.post('/mail/custom', async (req, res) => {
+    if (!canSend()) return res.status(409).json({ error: NOT_READY });
+    if (mailState.running) return res.status(409).json({ error: 'Wysyłka już trwa. Poczekaj, aż się skończy.' });
+    const b = req.body || {};
+    if (b.confirm !== 'WYŚLIJ') return res.status(400).json({ error: 'Wpisz WYŚLIJ, żeby potwierdzić wysyłkę.' });
+    const subject = str(b.subject, 200);
+    const body = String(b.body || '').replace(/\r\n/g, '\n').slice(0, 5000).trim();
+    if (!subject || !body) return res.status(400).json({ error: 'Wpisz temat i treść wiadomości.' });
+    const asInvite = b.asInvite === true; // osobne zaproszenie: oznacz jako wysłane, żeby ogólna wysyłka go pominęła
+    if (asInvite && !body.includes('{link}')) return res.status(400).json({ error: REQUIRED_LINK });
+    const ids = Array.isArray(b.guestIds) ? [...new Set(b.guestIds.filter((x) => typeof x === 'string'))] : [];
+    if (!ids.length) return res.status(400).json({ error: 'Wybierz co najmniej jedną osobę.' });
+    if (ids.length > CUSTOM_MAX) return res.status(400).json({ error: `Naraz można wysłać najwyżej ${CUSTOM_MAX} wiadomości. Do wszystkich użyj zakładki z zaproszeniami.` });
+    if (b.count !== ids.length) return res.status(409).json({ error: 'Liczba odbiorców się nie zgadza. Odśwież i potwierdź jeszcze raz.' });
+    const guests = ids.map((id) => store.byId(id));
+    if (guests.some((g) => !g)) return res.status(409).json({ error: 'Ktoś z wybranych został usunięty. Odśwież listę.' });
+    const rows = await checker.check(guests.map((g) => ({ guest: g, link: linkFor(req, g) })));
+    const bad = rows.filter((r) => r.blocking);
+    if (bad.length) return res.status(400).json({ error: 'Popraw adresy przed wysyłką: ' + bad.map((r) => r.name).join(', ') });
+    if (mailState.running) return res.status(409).json({ error: 'Wysyłka już trwa. Poczekaj, aż się skończy.' });
+    Object.assign(mailState, { running: true, aborted: '', mode: 'custom', total: ids.length, done: 0, failed: 0, current: '', startedAt: new Date(now()).toISOString(), finishedAt: null });
+    const links = new Map(rows.map((r) => [r.id, r.link]));
+    runSend(ids, links, (g) => mail.buildMessage(store.db.settings, g, links.get(g.id), { subject, body }), asInvite).catch((e) => console.error(e));
+    res.status(202).json({ total: ids.length });
+  });
 
   // ---------- Google OAuth (Gmail) ----------
   const sessionOf = (req) => auth.sessionValue(req);

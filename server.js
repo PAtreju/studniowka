@@ -128,9 +128,22 @@ app.use(['/host', '/editor', '/api/content'], (_req, res, next) => {
 });
 app.use(express.json({ limit: '1mb' }));
 const pub = path.join(__dirname, 'public');
-app.get('/', (_req, res) => res.sendFile(path.join(pub, 'play.html')));
-app.get('/host', (_req, res) => res.sendFile(path.join(pub, 'host.html')));
-app.get('/editor', (_req, res) => res.sendFile(path.join(pub, 'editor.html')));
+// Cloudflare trzyma pliki JS/CSS do 4 godzin, więc HTML odwołuje się do nich z ?v=<skrót treści>.
+function versionedHtml(dir, file) {
+  const html = fs.readFileSync(path.join(dir, file), 'utf8');
+  return html.replace(/(href|src)="\/([\w.-]+\.(?:js|css))"/g, (m, attr, name) => {
+    try {
+      const h = crypto.createHash('sha1').update(fs.readFileSync(path.join(dir, name))).digest('hex').slice(0, 10);
+      return `${attr}="/${name}?v=${h}"`;
+    } catch { return m; }
+  });
+}
+
+const pages = Object.fromEntries(['play', 'host', 'editor'].map((n) => [n, versionedHtml(pub, n + '.html')]));
+const page = (n) => (_req, res) => res.set('Cache-Control', 'no-cache').type('html').send(pages[n]);
+app.get('/', page('play'));
+app.get('/host', page('host'));
+app.get('/editor', page('editor'));
 app.use('/fonts', express.static(path.join(__dirname, 'node_modules', '@fontsource')));
 app.use(express.static(pub, { index: false }));
 

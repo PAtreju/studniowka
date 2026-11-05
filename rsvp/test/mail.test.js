@@ -202,7 +202,7 @@ test('mail routes need login; unconfigured disables sending; json transport stay
   const srv = await new Promise((r) => { const s = app.listen(0, '127.0.0.1', () => r(s)); });
   t.after(() => srv.close());
   const base = `http://127.0.0.1:${srv.address().port}`;
-  const routes = [['GET', '/mail/config'], ['GET', '/mail/check'], ['GET', '/mail/status'], ['GET', '/mail/preview.html'], ['PUT', '/mail/template'], ['POST', '/mail/send'], ['POST', '/mail/test'], ['POST', '/mail/preview']];
+  const routes = [['GET', '/mail/config'], ['GET', '/mail/check'], ['GET', '/mail/status'], ['GET', '/mail/preview.html'], ['PUT', '/mail/template'], ['POST', '/mail/send'], ['POST', '/mail/test'], ['POST', '/mail/preview'], ['POST', '/mail/custom']];
   for (const [m, u] of routes) {
     const r = await fetch(base + '/api/admin' + u, { method: m, headers: { 'content-type': 'application/json' }, body: m === 'GET' ? undefined : '{}' });
     assert.equal(r.status, 401, u);
@@ -233,4 +233,43 @@ test('HTML preview route: own CSP for inline styles, frameable only by itself', 
   assert.match(r.headers.get('content-security-policy'), /frame-ancestors 'self'/);
   assert.equal(r.headers.get('x-frame-options'), 'SAMEORIGIN');
   assert.match(r.text, /Zaproszenie/);
+});
+
+test('custom message: only picked guests, confirm + count required, invitation state untouched', async (t) => {
+  const h = await boot({ delay: 0 }); t.after(h.close);
+  await addGuests(h, ['Anna Kowalska, a@example.com', 'Bartek Nowak, b@example.com', 'Celina Wiśniewska, c@example.com', 'Zły Adres, zly@nie-ma.example']);
+  const gs = (await h.call('GET', '/api/admin/state')).json.guests;
+  const id = (e) => gs.find((g) => g.email === e).id;
+  const pick = [id('a@example.com'), id('c@example.com')];
+  const custom = (b) => h.call('POST', '/api/admin/mail/custom', { subject: 'Przypomnienie', body: 'Hej {imie}, link: {link}', guestIds: pick, count: 2, ...b });
+  assert.equal((await custom({ confirm: 'wyslij' })).status, 400);
+  assert.equal((await custom({ confirm: 'WYŚLIJ', count: 3 })).status, 409);
+  assert.equal((await custom({ confirm: 'WYŚLIJ', body: '' })).status, 400);
+  assert.equal((await custom({ confirm: 'WYŚLIJ', guestIds: [id('zly@nie-ma.example')], count: 1 })).status, 400);
+  assert.equal(h.sent.length, 0);
+  assert.equal((await custom({ confirm: 'WYŚLIJ' })).status, 202); // no /mail/check needed for a custom message
+  await h.idle();
+  assert.deepEqual(h.sent.map((m) => m.to.address), ['a@example.com', 'c@example.com']);
+  assert.equal(h.sent[0].subject, 'Przypomnienie');
+  assert.match(h.sent[0].text, /^Hej Anna, link: https:\/\/rsvp\.example\.test\/[A-Za-z0-9]{8}$/);
+  const after = (await h.call('GET', '/api/admin/state')).json.guests;
+  assert.ok(after.every((g) => !g.sentAt)); // invitations still count as not sent
+  assert.ok(after.find((g) => g.email === 'a@example.com').lastMessageAt);
+  // test of a custom message works without {link} and never carries a real guest link
+  assert.equal((await h.call('POST', '/api/admin/mail/test', { custom: true, to: 'me@example.com', subject: 'X', body: 'Bez linku' })).status, 200);
+  assert.equal(h.sent.at(-1).text, 'Bez linku');
+});
+
+test('custom message marked as invitation sets sentAt so the bulk send skips it', async (t) => {
+  const h = await boot({ delay: 0 }); t.after(h.close);
+  await addGuests(h, ['Anna Kowalska, a@example.com', 'Bartek Nowak, b@example.com']);
+  const a = (await h.call('GET', '/api/admin/state')).json.guests.find((g) => g.email === 'a@example.com');
+  const base = { confirm: 'WYŚLIJ', asInvite: true, subject: 'Zaproszenie', guestIds: [a.id], count: 1 };
+  assert.equal((await h.call('POST', '/api/admin/mail/custom', { ...base, body: 'bez linku' })).status, 400);
+  assert.equal((await h.call('POST', '/api/admin/mail/custom', { ...base, body: 'Drogi {imie}, {link}' })).status, 202);
+  await h.idle();
+  await check(h);
+  assert.equal((await send(h, { mode: 'unsent', count: 1 })).status, 202); // only Bartek is left
+  await h.idle();
+  assert.deepEqual(h.sent.map((m) => m.to.address), ['a@example.com', 'b@example.com']);
 });

@@ -75,12 +75,12 @@
       el('a', { class: 'btn btn-sm', href: '/api/admin/export.csv', text: 'Pobierz CSV' }),
       el('button', { class: 'btn btn-sm', type: 'button', text: 'Wyloguj', onclick: function () { api('POST', '/api/admin/logout', {}).then(showLogin); } }),
     ]);
-    var tabs = el('div', { class: 'tabs', role: 'tablist' }, [['guests', 'Goście'], ['mail', 'Wyślij zaproszenia'], ['settings', 'Ustawienia wydarzenia']].map(function (t) {
+    var tabs = el('div', { class: 'tabs', role: 'tablist' }, [['guests', 'Goście'], ['mail', 'Wyślij zaproszenia'], ['custom', 'Wiadomość do wybranych'], ['settings', 'Ustawienia wydarzenia']].map(function (t) {
       return el('button', { class: 'tab', role: 'tab', type: 'button', 'aria-selected': String(state.tab === t[0]), text: t[1], onclick: function () { state.tab = t[0]; render(); } });
     }));
     var main = el('main');
     app.appendChild(top); app.appendChild(tabs); app.appendChild(main);
-    if (state.tab === 'guests') guestsTab(main); else if (state.tab === 'mail') mailTab(main); else settingsTab(main);
+    if (state.tab === 'guests') guestsTab(main); else if (state.tab === 'mail') mailTab(main); else if (state.tab === 'custom') customTab(main); else settingsTab(main);
   }
 
   // ---------- guests ----------
@@ -163,16 +163,6 @@
     return many;
   }
 
-  function mailto(g) {
-    var s = state.data.settings;
-    var first = (g.name.split(/\s+/)[0]) || '';
-    var lines = ['Cześć ' + first + ',', '', 'zapraszamy Cię na ' + s.title + (s.date ? ', ' + s.date.split('-').reverse().join('.') : '') + (s.time ? ' o ' + s.time : '') + (s.place ? ', ' + s.place : '') + '.',
-      'Potwierdź, czy będziesz, klikając swój osobisty link (jedno kliknięcie, nic nie trzeba wypełniać):', '', g.link, ''];
-    if (s.deadline) lines.push('Odpowiedz, proszę, do ' + s.deadline.replace('T', ' ') + '.', '');
-    lines.push('Do zobaczenia!');
-    return 'mailto:' + encodeURIComponent(g.email || '').replace('%40', '@') + '?subject=' + encodeURIComponent('Zaproszenie na ' + s.title) + '&body=' + encodeURIComponent(lines.join('\n'));
-  }
-
   function copy(text) {
     function fallback() {
       var t = el('textarea', { class: 'sr-copy' }); t.value = text; document.body.appendChild(t); t.select();
@@ -195,7 +185,7 @@
       el('td', { 'data-l': 'Link otwarty', class: 'small', text: fmt(g.openedAt) || 'jeszcze nie' }),
       el('td', { class: 'c-act' }, [el('div', { class: 'acts' }, [
         el('button', { class: 'btn btn-sm', type: 'button', text: 'Kopiuj link', onclick: function () { copy(g.link); } }),
-        el('a', { class: 'btn btn-sm', href: mailto(g), text: 'Napisz e-mail' }),
+        el('button', { class: 'btn btn-sm', type: 'button', text: 'Napisz wiadomość', onclick: function () { custom.pick = {}; custom.pick[g.id] = true; state.tab = 'custom'; render(); } }),
         el('button', { class: 'btn btn-sm', type: 'button', text: 'Edytuj', onclick: function () { editDialog(g); } }),
         el('button', { class: 'btn btn-sm', type: 'button', text: 'Wyzeruj odpowiedź', disabled: g.status === 'pending', onclick: function () {
           if (!confirm('Wyzerować odpowiedź gościa ' + g.name + '? Wróci do statusu „czeka”.')) return;
@@ -455,6 +445,134 @@
         }).catch(function () { clearInterval(mailUi.timer); });
       }, 2500);
     }
+  }
+
+  // ---------- wiadomość do wybranych ----------
+  var custom = { pick: {}, q: '', subject: '', body: '', timer: null };
+
+  function customTab(main) {
+    clearInterval(custom.timer);
+    var guests = state.data.guests;
+    var cfg = null;
+    var subj = el('input', { type: 'text', maxlength: 200, value: custom.subject, placeholder: 'Np. Przypomnienie o studniówce' });
+    var body = el('textarea', { class: 'tall', maxlength: 5000, placeholder: 'Treść wiadomości' });
+    body.value = custom.body;
+    var q = el('input', { type: 'search', placeholder: 'Szukaj osoby lub adresu', value: custom.q, 'aria-label': 'Szukaj gościa' });
+    var listBox = el('div', { class: 'pick-list' });
+    var countP = el('p', { class: 'small' });
+    var pre = el('pre', { class: 'preview-text' });
+    var testTo = el('input', { type: 'email', placeholder: 'twoj@adres.pl', autocomplete: 'email' });
+    var msg = el('p', { role: 'status', hidden: true });
+    var prog = el('p', { class: 'progress', role: 'status', 'aria-live': 'polite' });
+    var asInv = el('input', { type: 'checkbox' });
+    asInv.checked = !!custom.asInvite;
+    asInv.addEventListener('change', function () { custom.asInvite = asInv.checked; upd(); });
+    var go = el('button', { class: 'btn btn-primary', type: 'button', onclick: function () { confirmCustom(); } });
+    var testBtn = el('button', { class: 'btn', type: 'button', text: 'Wyślij test do mnie', onclick: function () {
+      show('', '');
+      api('POST', '/api/admin/mail/test', { custom: true, to: testTo.value, subject: subj.value, body: body.value })
+        .then(function () { show('msg-ok', 'Test poszedł na ' + testTo.value + '. Link w teście jest fałszywy.'); })
+        .catch(function (x) { if (x.message !== 'auth') show('msg-err', x.message); });
+    } });
+
+    function show(cls, text) { msg.className = cls; msg.textContent = text; msg.hidden = !text; }
+    function picked() { return guests.filter(function (g) { return custom.pick[g.id]; }); }
+    function drawList() {
+      listBox.textContent = '';
+      var t = custom.q.trim().toLowerCase();
+      guests.filter(function (g) { return !t || (g.name + ' ' + (g.email || '')).toLowerCase().indexOf(t) >= 0; }).forEach(function (g) {
+        var cb = el('input', { type: 'checkbox', disabled: !g.email });
+        cb.checked = !!custom.pick[g.id];
+        cb.addEventListener('change', function () { if (cb.checked) custom.pick[g.id] = true; else delete custom.pick[g.id]; upd(); });
+        var extra = g.lastMessageAt ? 'ostatnia wiadomość ' + fmt(g.lastMessageAt) : g.lastMessageError ? 'błąd ostatniej wiadomości' : '';
+        listBox.appendChild(el('label', { class: 'check pick' }, [cb, el('span', {}, [el('b', { text: g.name }), ' ', el('span', { class: 'small', text: (g.email || 'brak e-maila') + (extra ? ', ' + extra : '') })])]));
+      });
+    }
+    function upd() {
+      custom.subject = subj.value; custom.body = body.value;
+      var ps = picked(), n = ps.length, g = ps[0] || { name: 'Anna Kowalska', link: 'https://rsvp.shroomdev.pl/AbCd1234' };
+      countP.textContent = n ? 'Wybrano: ' + n + ' (' + ps.map(function (x) { return x.name; }).join(', ') + ')' : 'Nikogo nie wybrano.';
+      pre.textContent = 'Do: ' + (ps[0] ? ps[0].email : '…') + '\nTemat: ' + renderLocal(subj.value, g, g.link) + '\n\n' + renderLocal(body.value, g, g.link).replace(/^> ?/gm, '    ');
+      var running = mailUi.status && mailUi.status.running;
+      go.textContent = 'Wyślij do ' + n + ' ' + plural(n, 'osoby', 'osób', 'osób');
+      var needLink = asInv.checked && body.value.indexOf('{link}') < 0;
+      go.disabled = !cfg || !cfg.configured || !n || !subj.value.trim() || !body.value.trim() || running || needLink;
+      if (needLink) show('msg-err', 'Zaproszenie musi zawierać {link}, żeby gość mógł potwierdzić obecność.');
+      else if (msg.textContent.indexOf('{link}') >= 0) show('', '');
+      testBtn.disabled = !cfg || !cfg.configured;
+    }
+    function progress() {
+      var st = mailUi.status;
+      prog.textContent = st && st.total && st.mode === 'custom' ? (st.running ? 'Wysyłanie: ' : 'Zakończono: ') + st.done + ' z ' + st.total + ', błędy: ' + st.failed + '.' : '';
+    }
+    function poll() {
+      clearInterval(custom.timer);
+      custom.timer = setInterval(function () {
+        if (state.tab !== 'custom') { clearInterval(custom.timer); return; }
+        api('GET', '/api/admin/mail/status').then(function (st) {
+          mailUi.status = st; progress(); upd();
+          if (!st.running) {
+            clearInterval(custom.timer);
+            toast(st.failed ? 'Wysłano, ale z błędami: ' + st.failed : 'Wiadomości wysłane');
+            api('GET', '/api/admin/state').then(function (d) { state.data = d; guests = d.guests; drawList(); upd(); });
+          }
+        }).catch(function () { clearInterval(custom.timer); });
+      }, 2000);
+    }
+    function confirmCustom() {
+      var ps = picked(), n = ps.length;
+      var word = el('input', { type: 'text', autocomplete: 'off', 'aria-label': 'Wpisz WYŚLIJ', placeholder: 'WYŚLIJ' });
+      var err = el('p', { class: 'msg-err', role: 'alert', hidden: true });
+      var ok = el('button', { class: 'btn btn-primary', type: 'submit', text: 'Wyślij do ' + n + ' ' + plural(n, 'osoby', 'osób', 'osób') });
+      var dlg = el('dialog', { 'aria-labelledby': 'cc-t' }, [
+        el('h2', { id: 'cc-t', text: 'Wysłać wiadomość „' + subj.value.trim() + '”?' }),
+        el('p', { text: 'Odbiorcy: ' + ps.map(function (g) { return g.name + ' <' + g.email + '>'; }).join(', ') + '.' }),
+        el('p', { text: 'Tego nie da się cofnąć. Żeby potwierdzić, wpisz WYŚLIJ.' }),
+        el('form', { method: 'dialog', onsubmit: function (e) {
+          e.preventDefault();
+          if (word.value.trim() !== 'WYŚLIJ') { err.textContent = 'Wpisz dokładnie WYŚLIJ wielkimi literami.'; err.hidden = false; return; }
+          ok.disabled = true;
+          api('POST', '/api/admin/mail/custom', { confirm: 'WYŚLIJ', asInvite: asInv.checked, subject: subj.value, body: body.value, count: n, guestIds: ps.map(function (g) { return g.id; }) })
+            .then(function () { dlg.close(); toast('Wysyłka ruszyła'); mailUi.status = { running: true, mode: 'custom', total: n, done: 0, failed: 0 }; progress(); upd(); poll(); })
+            .catch(function (x) { ok.disabled = false; if (x.message !== 'auth') { err.textContent = x.message; err.hidden = false; } });
+        } }, [field('Potwierdzenie', word), err, el('div', { class: 'row-end' }, [el('button', { class: 'btn', type: 'button', text: 'Anuluj', onclick: function () { dlg.close(); } }), ok])]),
+      ]);
+      dlg.addEventListener('close', function () { dlg.remove(); });
+      document.body.appendChild(dlg);
+      dlg.showModal();
+      word.focus();
+    }
+
+    q.addEventListener('input', function () { custom.q = q.value; drawList(); });
+    subj.addEventListener('input', upd);
+    body.addEventListener('input', upd);
+    main.appendChild(el('div', { class: 'mail' }, [
+      el('section', { class: 'step' }, [
+        el('h2', { text: 'Do kogo' }),
+        el('p', { class: 'small', text: 'Zaznacz jedną lub kilka osób.' }),
+        q, listBox, countP,
+        el('div', { class: 'acts-row' }, [el('button', { class: 'btn btn-sm', type: 'button', text: 'Odznacz wszystkich', onclick: function () { custom.pick = {}; drawList(); upd(); } })]),
+      ]),
+      el('section', { class: 'step' }, [
+        el('h2', { text: 'Treść' }),
+        el('p', { class: 'small', text: 'Możesz użyć {imie}, {nazwisko} i {link} (osobisty link gościa), ale nie musisz. Linie zaczynające się od „> ” to cytat.' }),
+        field('Temat', subj), field('Treść', body),
+        el('label', { class: 'check' }, [asInv, el('span', { text: 'To jest zaproszenie: oznacz te osoby jako zaproszone, żeby wysyłka zaproszeń do wszystkich je pominęła' })]),
+        el('p', { class: 'small', text: 'Podgląd dla pierwszej wybranej osoby' }), pre,
+      ]),
+      el('section', { class: 'step' }, [
+        el('h2', { text: 'Wyślij' }),
+        el('div', { class: 'test' }, [field('Wyślij test do mnie na adres', testTo), testBtn]),
+        msg, go, prog,
+      ]),
+    ]));
+    drawList(); upd();
+    Promise.all([api('GET', '/api/admin/mail/config'), api('GET', '/api/admin/mail/status')]).then(function (r) {
+      cfg = r[0]; mailUi.cfg = r[0]; mailUi.status = r[1];
+      if (!cfg.configured) show('msg-err', 'Wysyłka nie jest gotowa. Najpierw połącz konto Gmail w zakładce Wyślij zaproszenia.');
+      progress(); upd();
+      if (r[1].running) poll();
+    }).catch(fail);
   }
 
   // ---------- settings ----------

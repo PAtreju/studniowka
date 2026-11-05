@@ -30,7 +30,7 @@ a { color: var(--champagne); }
 .btn-sm { min-height: 34px; padding: 4px 10px; font-size: 13.5px; }
 .btn[disabled] { opacity: .5; cursor: default; }
 
-input[type=text], input[type=email], input[type=password], input[type=date], input[type=time], input[type=datetime-local], textarea, select {
+input[type=text], input[type=search], input[type=email], input[type=password], input[type=date], input[type=time], input[type=datetime-local], textarea, select {
   font: inherit; color: var(--ivory); background: rgba(0,0,0,.25); border: 1px solid var(--line); border-radius: 3px; padding: 8px 10px; min-height: 40px; width: 100%;
   color-scheme: dark;
 }
@@ -146,3 +146,8 @@ textarea.tall { min-height: 220px; }
 @media (min-width: 860px) { .pv-grid { grid-template-columns: 1fr 1fr; } }
 .uri { overflow-wrap: anywhere; user-select: all; }
 .step > .btn, .step > .acts-row { justify-self: start; }
+
+/* wiadomość do wybranych */
+.pick-list { display: grid; gap: 2px; max-height: 340px; overflow-y: auto; margin: 10px 0; padding: 6px 10px; border: 1px solid var(--line, rgba(0,0,0,.15)); }
+.check.pick { align-items: flex-start; padding: 6px 0; }
+.check.pick span .small { display: block; overflow-wrap: anywhere; }
