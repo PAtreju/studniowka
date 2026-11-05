@@ -28,10 +28,18 @@ function renderTemplate(tpl, guest, link) {
   return String(tpl).replace(/\{(imie|nazwisko|link)\}/g, (_, k) => vars[k]);
 }
 
-function renderHtml(subject, text, guest, link) {
+// Mail nie jest imienny: nagłówek karty to nazwa wydarzenia, nie nazwisko gościa.
+// Link w środku zdania („klikając w {link}”) pokazujemy jako „ten link”, sam w akapicie – jako adres.
+function renderHtml(subject, text, guest, link, settings = {}) {
+  const heading = settings.title || 'Studniówka';
+  const urlRe = /https?:\/\/[^\s<]+[^\s<.,;:!?)"”]/g;
   const paras = text.split(/\n{2,}/).map((p) => {
-    const safe = esc(p).replace(/\n/g, '<br>');
-    const linked = safe.split(esc(link)).join(`<a href="${esc(link)}" style="color:#2A0A14;word-break:break-all">${esc(link)}</a>`);
+    const alone = p.trim() === link;
+    const linked = esc(p).replace(/\n/g, '<br>').replace(urlRe, (u) => {
+      const own = u === esc(link);
+      const label = own && !alone ? 'ten link' : u;
+      return `<a href="${u}" style="color:#2A0A14;${own ? 'font-weight:bold;' : ''}word-break:break-all">${label}</a>`;
+    });
     return `<p style="margin:0 0 16px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.6;color:#2A0A14">${linked}</p>`;
   }).join('');
   return `<!doctype html><html lang="pl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(subject)}</title></head>
@@ -40,16 +48,16 @@ function renderHtml(subject, text, guest, link) {
 <div style="max-width:520px;margin:0 auto;background:#F7F0E3;padding:10px">
 <div style="border:1px solid #B59555;padding:3px"><div style="border:1px solid #B59555;padding:32px 24px;text-align:center">
 <p style="margin:0;font-family:Georgia,'Times New Roman',serif;font-style:italic;font-size:16px;color:#6B5058">Zaproszenie</p>
-<p style="margin:14px 0 22px;font-family:'Bodoni 72',Didot,Georgia,serif;font-size:34px;line-height:1.1;color:#2A0A14">${esc(guest.name)}</p>
+<p style="margin:14px 0 22px;font-family:'Bodoni 72',Didot,Georgia,serif;font-size:34px;line-height:1.1;color:#2A0A14">${esc(heading)}</p>
 <div style="text-align:left">${paras}</div>
-<p style="margin:24px 0 8px"><a href="${esc(link)}" style="display:inline-block;background:#2A0A14;color:#E8CF9A;font-family:Arial,Helvetica,sans-serif;font-weight:bold;font-size:16px;text-decoration:none;padding:14px 28px">Otwórz zaproszenie</a></p>
+<p style="margin:24px 0 8px"><a href="${esc(link)}" style="display:inline-block;background:#2A0A14;color:#E8CF9A;font-family:Arial,Helvetica,sans-serif;font-weight:bold;font-size:16px;text-decoration:none;padding:14px 28px">Potwierdź obecność</a></p>
 </div></div></div></div></div></body></html>`;
 }
 
 function buildMessage(settings, guest, link, over = {}) {
   const subject = renderTemplate(over.subject != null ? over.subject : settings.mailSubject, guest, link);
   const text = renderTemplate(over.body != null ? over.body : settings.mailBody, guest, link);
-  return { subject, text, html: renderHtml(subject, text, guest, link) };
+  return { subject, text, html: renderHtml(subject, text, guest, link, settings) };
 }
 
 function mailConfig(env) {
