@@ -18,6 +18,7 @@ services:
     environment:
       DATA_DIR: /app/data
       PUBLIC_BASE_URL: https://rsvp.shroomdev.pl
+      TRUST_PROXY: uniquelocal
     volumes:
       - ./data/rsvp:/app/data
 

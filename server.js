@@ -108,8 +108,24 @@ async function joinInfo() {
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+const io = new Server(server, { maxHttpBufferSize: 64 * 1024, pingTimeout: 30000 });
 
+app.disable('x-powered-by');
+app.use((_req, res, next) => {
+  res.set({
+    'Content-Security-Policy':
+      "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss:; font-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+    'X-Content-Type-Options': 'nosniff',
+    'Referrer-Policy': 'no-referrer',
+    'X-Frame-Options': 'DENY',
+    'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+  });
+  next();
+});
+app.use(['/host', '/editor', '/api/content'], (_req, res, next) => {
+  res.set({ 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' });
+  next();
+});
 app.use(express.json({ limit: '1mb' }));
 const pub = path.join(__dirname, 'public');
 app.get('/', (_req, res) => res.sendFile(path.join(pub, 'play.html')));
@@ -118,8 +134,48 @@ app.get('/editor', (_req, res) => res.sendFile(path.join(pub, 'editor.html')));
 app.use('/fonts', express.static(path.join(__dirname, 'node_modules', '@fontsource')));
 app.use(express.static(pub, { index: false }));
 
-const keyOk = (k) => typeof k === 'string' && k.length === HOST_KEY.length && crypto.timingSafeEqual(Buffer.from(k), Buffer.from(HOST_KEY));
-const requireKey = (req, res, next) => (keyOk(req.get('x-host-key')) ? next() : res.status(401).json({ error: 'Zły klucz prowadzącego.' }));
+const HOST_KEY_BUF = Buffer.from(HOST_KEY);
+const keyOk = (k) => {
+  if (typeof k !== 'string') return false;
+  const b = Buffer.from(k);
+  return b.length === HOST_KEY_BUF.length && crypto.timingSafeEqual(b, HOST_KEY_BUF);
+};
+
+// ---------- ograniczenia (publiczny dostęp) ----------
+
+const MAX_PLAYERS = Number(process.env.MAX_PLAYERS) || 300;
+// za tunelem Cloudflare prawdziwy adres klienta jest w CF-Connecting-IP
+const ipOf = (headers, fallback) => String(headers['cf-connecting-ip'] || fallback || '?');
+
+function limiter(max, windowMs) {
+  const hits = new Map();
+  setInterval(() => {
+    const now = Date.now();
+    for (const [k, v] of hits) if (v.reset < now) hits.delete(k);
+  }, windowMs).unref();
+  return (key) => {
+    const now = Date.now();
+    let e = hits.get(key);
+    if (!e || e.reset < now) hits.set(key, (e = { n: 0, reset: now + windowMs }));
+    e.n += 1;
+    return e.n <= max;
+  };
+}
+const keyFailLimit = limiter(10, 10 * 60 * 1000); // 10 złych kluczy / 10 min / IP
+const joinLimit = limiter(150, 60 * 1000); // cała sala bywa za jednym NAT-em
+const connLimit = limiter(300, 60 * 1000);
+const keyBlocked = new Map();
+function checkKey(ip, key) {
+  if ((keyBlocked.get(ip) || 0) > Date.now()) return { ok: false, error: 'Za dużo prób. Spróbuj za kilka minut.' };
+  if (keyOk(key)) return { ok: true };
+  if (!keyFailLimit(ip)) keyBlocked.set(ip, Date.now() + 10 * 60 * 1000);
+  return { ok: false, error: 'Zły klucz prowadzącego.' };
+}
+
+const requireKey = (req, res, next) => {
+  const r = checkKey(ipOf(req.headers, req.socket.remoteAddress), req.get('x-host-key'));
+  return r.ok ? next() : res.status(r.error.startsWith('Za dużo') ? 429 : 401).json({ error: r.error });
+};
 
 app.get('/api/join-info', async (_req, res) => res.json(await joinInfo()));
 app.get('/api/content', requireKey, (_req, res) => res.json(content));
@@ -154,9 +210,13 @@ function broadcast() {
 const socketsPerPlayer = new Map();
 
 io.on('connection', (socket) => {
+  const ip = ipOf(socket.handshake.headers, socket.handshake.address);
+  if (!connLimit(ip)) return socket.disconnect(true);
+
   socket.on('host:auth', async (key, cb) => {
     if (typeof cb !== 'function') return;
-    if (!keyOk(key)) return cb({ ok: false, error: 'Zły klucz prowadzącego.' });
+    const r = checkKey(ip, key);
+    if (!r.ok) return cb(r);
     socket.data.host = true;
     socket.join('host');
     cb({ ok: true, games: gamesSummary(), join: await joinInfo(), state: game.hostView() });
@@ -182,6 +242,9 @@ io.on('connection', (socket) => {
   socket.on('player:join', ({ name, id } = {}, cb) => {
     if (typeof cb !== 'function') return;
     if (socket.data.playerId) return cb({ ok: false, error: 'Już dołączono.' });
+    if (!joinLimit(ip)) return cb({ ok: false, error: 'Za dużo prób dołączenia. Spróbuj za minutę.' });
+    const known = typeof id === 'string' && game.players && game.players.has && game.players.has(id);
+    if (!known && game.players && game.players.size >= MAX_PLAYERS) return cb({ ok: false, error: 'Sala jest pełna.' });
     const r = game.addPlayer(name, id);
     if (!r.ok) return cb(r);
     const pid = r.player.id;

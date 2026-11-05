@@ -1,0 +1,20 @@
+{
+  "name": "studniowka-rsvp",
+  "version": "1.0.0",
+  "private": true,
+  "description": "RSVP na studniówkę: osobiste linki dla gości i panel organizatora",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test/"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@fontsource/bodoni-moda": "^5.0.0",
+    "@fontsource/manrope": "^5.0.0",
+    "express": "^4.19.2",
+    "nodemailer": "^10.3.1"
+  }
+}

@@ -135,7 +135,7 @@ function qTop(s) {
 function renderQuiz(s) {
   return `${qTop(s)}
   <div class="answers n${s.question.options.length}">${s.question.options
-    .map((o, i) => `<button class="ans opt-${i}" onclick="answer(${i})"><span class="letter">${LETTERS[i]}</span><span>${esc(o)}</span></button>`)
+    .map((o, i) => `<button class="ans opt-${i}" data-ans="${i}"><span class="letter">${LETTERS[i]}</span><span>${esc(o)}</span></button>`)
     .join('')}</div>`;
 }
 
@@ -204,4 +204,8 @@ function renderPollFinal(s) {
       .join('')}</ul></section>`;
 }
 
-window.answer = answer;
+// odpowiedzi quizu – delegacja zdarzeń (bez inline onclick, zgodnie z CSP)
+$('#view').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-ans]');
+  if (b) answer(Number(b.dataset.ans));
+});
