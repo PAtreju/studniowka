@@ -34,6 +34,15 @@ function renderHtml(subject, text, guest, link, settings = {}) {
   const heading = settings.title || 'Studniówka';
   const urlRe = /https?:\/\/[^\s<]+[^\s<.,;:!?)"”]/g;
   const paras = text.split(/\n{2,}/).map((p) => {
+    const lines = p.split('\n');
+    if (lines.every((l) => /^>/.test(l))) {
+      const q = lines.map((l) => esc(l.replace(/^> ?/, '')));
+      const by = q.length > 1 ? q.pop() : '';
+      return `<div style="margin:28px 8px 28px;padding:20px 8px 18px;border-top:1px solid #B59555;border-bottom:1px solid #B59555;text-align:center">
+<p style="margin:0;font-family:Georgia,'Times New Roman',serif;font-style:italic;font-size:20px;line-height:1.45;color:#2A0A14">${q.join('<br>')}</p>
+${by ? `<p style="margin:12px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;letter-spacing:0.02em;color:#6B5058">${by}</p>` : ''}
+</div>`;
+    }
     const alone = p.trim() === link;
     const linked = esc(p).replace(/\n/g, '<br>').replace(urlRe, (u) => {
       const own = u === esc(link);
@@ -56,8 +65,10 @@ function renderHtml(subject, text, guest, link, settings = {}) {
 
 function buildMessage(settings, guest, link, over = {}) {
   const subject = renderTemplate(over.subject != null ? over.subject : settings.mailSubject, guest, link);
-  const text = renderTemplate(over.body != null ? over.body : settings.mailBody, guest, link);
-  return { subject, text, html: renderHtml(subject, text, guest, link, settings) };
+  const raw = renderTemplate(over.body != null ? over.body : settings.mailBody, guest, link);
+  // linie zaczynające się od "> " to cytat: w HTML ozdobny blok, w tekście wcięcie
+  const text = raw.replace(/^> ?/gm, '    ');
+  return { subject, text, html: renderHtml(subject, raw, guest, link, settings) };
 }
 
 function mailConfig(env) {

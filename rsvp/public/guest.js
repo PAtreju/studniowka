@@ -95,9 +95,6 @@
       el('p', { class: 'kicker', text: 'Zaproszenie' }),
       el('h1', { class: 'event-title', text: ev.title }),
       ornament(),
-      el('p', { class: 'invite', text: 'Zapraszamy' }),
-      el('p', { class: 'name', text: g.name }),
-      ornament(),
     ];
     var det = [];
     if (date) det.push(el('p', { class: 'when', text: date }));
@@ -187,7 +184,7 @@
   }
 
   function render() {
-    document.title = 'Zaproszenie: ' + data.guest.name;
+    document.title = 'Zaproszenie: ' + (data.event.title || 'Studniówka');
     var g = data.guest, area;
     if (g.status === 'pending' || editing) {
       if (data.deadlinePassed) area = el('div', { class: 'done' }, [el('h2', { text: 'Termin odpowiedzi minął' }), el('p', { text: 'Jeśli chcesz dać znać, czy będziesz, napisz bezpośrednio do organizatora.' })]);

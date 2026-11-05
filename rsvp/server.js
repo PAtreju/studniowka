@@ -81,7 +81,7 @@ function createApp(opts = {}) {
 
   // ---------- guest API ----------
   const guestView = (g) => ({
-    name: g.name, status: g.status, plusOneAllowed: g.plusOneAllowed,
+    status: g.status, plusOneAllowed: g.plusOneAllowed,
     plusOne: g.plusOne, plusOneName: g.plusOneName, message: g.message, respondedAt: g.respondedAt,
   });
   const publicEvent = () => { const { mailSubject, mailBody, ...rest } = store.db.settings; return rest; };
@@ -317,7 +317,8 @@ function createApp(opts = {}) {
     if (!EMAIL_RE.test(to)) return res.status(400).json({ error: 'Wpisz poprawny adres, na który wysłać test.' });
     const body = typeof b.body === 'string' ? b.body : store.db.settings.mailBody;
     if (!body.includes('{link}')) return res.status(400).json({ error: REQUIRED_LINK });
-    const g = store.byId(b.guestId) || store.db.guests[0] || { name: 'Anna Kowalska', token: 'AbCd1234' };
+    // test nigdy nie zawiera prawdziwego linku gościa – kliknięcie w teście nie może potwierdzić za kogoś
+    const g = { name: 'Gość testowy', token: 'TestTest' };
     const m = mail.buildMessage(store.db.settings, g, linkFor(req, g), { subject: typeof b.subject === 'string' ? b.subject : null, body });
     m.subject = '[TEST] ' + m.subject;
     try { await sendOne(to, g.name, m); res.json({ ok: true }); }

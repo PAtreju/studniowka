@@ -74,7 +74,7 @@ test('GET shows data and records open, never confirms', async (t) => {
   const { h, g } = await withGuest(t);
   const r = await h.call('GET', `/api/r/${g.token}`, undefined, { anon: true });
   assert.equal(r.status, 200);
-  assert.equal(r.json.guest.name, 'Test Gość');
+  assert.equal(r.json.guest.name, undefined); // zaproszenie nie jest imienne
   assert.equal(r.json.guest.status, 'pending');
   assert.equal(r.json.guest.plusOneAllowed, true);
   assert.equal(r.json.guest.token, undefined);

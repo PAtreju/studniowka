@@ -146,7 +146,7 @@ test('send via Gmail API: raw message, refresh token use, From is connected acco
   assert.match(raw, /^To: [^\r\n]*<me@example\.com>/m);
   assert.match(raw, /multipart\/alternative/);
   const text = Buffer.from(raw.split('Content-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n')[1].split('\r\n--')[0].replace(/\r\n/g, ''), 'base64').toString('utf8');
-  assert.match(text, /Cześć Zażółć/);
+  assert.match(text, /\/TestTest/); // test zawsze z fałszywym linkiem
   assert.match(text, /https:\/\/rsvp\.example\.test\/[A-Za-z0-9]{8}/);
   // token expires -> refreshed with the stored refresh token
   h.advance(2 * 3600 * 1000);
