@@ -461,6 +461,16 @@
     var listBox = el('div', { class: 'pick-list' });
     var countP = el('p', { class: 'small' });
     var pre = el('pre', { class: 'preview-text' });
+    var frame = el('iframe', { class: 'preview-frame', sandbox: 'allow-same-origin', title: 'Podgląd wiadomości HTML' });
+    var frameTimer = null;
+    function refreshFrame() {
+      clearTimeout(frameTimer);
+      frameTimer = setTimeout(function () {
+        var first = picked()[0];
+        api('POST', '/api/admin/mail/custom/draft', { subject: subj.value, body: body.value, guestId: first ? first.id : '' })
+          .then(function () { frame.src = '/api/admin/mail/custom/preview.html?t=' + Date.now(); }).catch(function () {});
+      }, 400);
+    }
     var testTo = el('input', { type: 'email', placeholder: 'twoj@adres.pl', autocomplete: 'email' });
     var msg = el('p', { role: 'status', hidden: true });
     var prog = el('p', { class: 'progress', role: 'status', 'aria-live': 'polite' });
@@ -493,6 +503,7 @@
       var ps = picked(), n = ps.length, g = ps[0] || { name: 'Anna Kowalska', link: 'https://rsvp.shroomdev.pl/AbCd1234' };
       countP.textContent = n ? 'Wybrano: ' + n + ' (' + ps.map(function (x) { return x.name; }).join(', ') + ')' : 'Nikogo nie wybrano.';
       pre.textContent = 'Do: ' + (ps[0] ? ps[0].email : '…') + '\nTemat: ' + renderLocal(subj.value, g, g.link) + '\n\n' + renderLocal(body.value, g, g.link).replace(/^> ?/gm, '    ');
+      refreshFrame();
       var running = mailUi.status && mailUi.status.running;
       go.textContent = 'Wyślij do ' + n + ' ' + plural(n, 'osoby', 'osób', 'osób');
       var needLink = asInv.checked && body.value.indexOf('{link}') < 0;
@@ -558,7 +569,8 @@
         el('p', { class: 'small', text: 'Możesz użyć {imie}, {nazwisko} i {link} (osobisty link gościa), ale nie musisz. Linie zaczynające się od „> ” to cytat.' }),
         field('Temat', subj), field('Treść', body),
         el('label', { class: 'check' }, [asInv, el('span', { text: 'To jest zaproszenie: oznacz te osoby jako zaproszone, żeby wysyłka zaproszeń do wszystkich je pominęła' })]),
-        el('p', { class: 'small', text: 'Podgląd dla pierwszej wybranej osoby' }), pre,
+        el('p', { class: 'small', text: 'Podgląd dla pierwszej wybranej osoby. Tak zobaczy to gość (HTML), a obok wersja tekstowa dla programów bez HTML.' }),
+        el('div', { class: 'pv-grid' }, [el('div', {}, [frame]), el('div', {}, [pre])]),
       ]),
       el('section', { class: 'step' }, [
         el('h2', { text: 'Wyślij' }),

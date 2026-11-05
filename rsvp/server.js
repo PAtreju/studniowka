@@ -401,6 +401,23 @@ function createApp(opts = {}) {
   });
 
 
+  const sessionOf = (req) => auth.sessionValue(req);
+  // Podgląd HTML wiadomości do wybranych: szkic trzymany w pamięci per sesja, iframe pobiera go GET-em
+  const drafts = new Map();
+  admin.post('/mail/custom/draft', (req, res) => {
+    const b = req.body || {};
+    if (drafts.size > 50) drafts.clear();
+    drafts.set(sessionOf(req), { subject: str(b.subject, 200), body: String(b.body || '').replace(/\r\n/g, '\n').slice(0, 5000), guestId: typeof b.guestId === 'string' ? b.guestId : '' });
+    res.json({ ok: true });
+  });
+  admin.get('/mail/custom/preview.html', (req, res) => {
+    const d = drafts.get(sessionOf(req)) || { subject: '', body: '', guestId: '' };
+    const g = store.byId(d.guestId) || { name: 'Anna Kowalska', token: 'AbCd1234' };
+    const m = mail.buildMessage(store.db.settings, g, linkFor(req, g), { subject: d.subject, body: d.body });
+    res.set({ 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'self'", 'X-Frame-Options': 'SAMEORIGIN', 'Cache-Control': 'no-store' });
+    res.type('html').send(m.html);
+  });
+
   // Osobna wiadomość do wybranych gości (np. przypomnienie). Nie zmienia stanu wysyłki zaproszeń.
   const CUSTOM_MAX = 50;
   admin.post('/mail/custom', async (req, res) => {
@@ -430,7 +447,6 @@ function createApp(opts = {}) {
   });
 
   // ---------- Google OAuth (Gmail) ----------
-  const sessionOf = (req) => auth.sessionValue(req);
   const toAdmin = (res, q) => res.redirect(303, '/admin' + (q ? '?' + q : ''));
   app.get('/admin/google/start', noStore, (req, res) => {
     if (!auth.isAuthed(req)) return toAdmin(res);

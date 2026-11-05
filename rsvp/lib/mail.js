@@ -30,7 +30,7 @@ function renderTemplate(tpl, guest, link) {
 
 // Mail nie jest imienny: nagłówek karty to nazwa wydarzenia, nie nazwisko gościa.
 // Link w środku zdania („klikając w {link}”) pokazujemy jako „ten link”, sam w akapicie – jako adres.
-function renderHtml(subject, text, guest, link, settings = {}) {
+function renderHtml(subject, text, guest, link, settings = {}, withButton = true) {
   const heading = settings.title || 'Studniówka';
   const urlRe = /https?:\/\/[^\s<]+[^\s<.,;:!?)"”]/g;
   const paras = text.split(/\n{2,}/).map((p) => {
@@ -59,16 +59,17 @@ ${by ? `<p style="margin:12px 0 0;font-family:Arial,Helvetica,sans-serif;font-si
 <p style="margin:0;font-family:Georgia,'Times New Roman',serif;font-style:italic;font-size:16px;color:#6B5058">Zaproszenie</p>
 <p style="margin:14px 0 22px;font-family:'Bodoni 72',Didot,Georgia,serif;font-size:34px;line-height:1.1;color:#2A0A14">${esc(heading)}</p>
 <div style="text-align:left">${paras}</div>
-<p style="margin:24px 0 8px"><a href="${esc(link)}" style="display:inline-block;background:#2A0A14;color:#E8CF9A;font-family:Arial,Helvetica,sans-serif;font-weight:bold;font-size:16px;text-decoration:none;padding:14px 28px">Potwierdź obecność</a></p>
+${withButton ? `<p style="margin:24px 0 8px"><a href="${esc(link)}" style="display:inline-block;background:#2A0A14;color:#E8CF9A;font-family:Arial,Helvetica,sans-serif;font-weight:bold;font-size:16px;text-decoration:none;padding:14px 28px">Potwierdź obecność</a></p>` : ''}
 </div></div></div></div></div></body></html>`;
 }
 
 function buildMessage(settings, guest, link, over = {}) {
   const subject = renderTemplate(over.subject != null ? over.subject : settings.mailSubject, guest, link);
-  const raw = renderTemplate(over.body != null ? over.body : settings.mailBody, guest, link);
+  const tpl = over.body != null ? over.body : settings.mailBody;
+  const raw = renderTemplate(tpl, guest, link);
   // linie zaczynające się od "> " to cytat: w HTML ozdobny blok, w tekście wcięcie
   const text = raw.replace(/^> ?/gm, '    ');
-  return { subject, text, html: renderHtml(subject, raw, guest, link, settings) };
+  return { subject, text, html: renderHtml(subject, raw, guest, link, settings, String(tpl).includes('{link}')) };
 }
 
 function mailConfig(env) {
