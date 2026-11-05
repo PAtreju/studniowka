@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "game-show",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["start"],
+      "env": { "HOST_KEY": "devkey" },
+      "port": 3000
+    }
+  ]
+}

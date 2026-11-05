@@ -1,0 +1,57 @@
+{
+  "classList": [
+    "Ania",
+    "Bartek",
+    "Kasia",
+    "Kuba",
+    "Ola",
+    "Michał",
+    "Zuzia",
+    "Wiktor"
+  ],
+  "quizzes": [
+    {
+      "id": "quiz-szkola",
+      "title": "Quiz: Nasza szkoła",
+      "questions": [
+        {
+          "text": "Ile lat trwa nauka w liceum?",
+          "answers": ["3", "4", "5", "6"],
+          "correct": 1,
+          "time": 15
+        },
+        {
+          "text": "Który taniec tradycyjnie otwiera studniówkę?",
+          "answers": ["Walc", "Polonez", "Tango", "Mazurek"],
+          "correct": 1,
+          "time": 15
+        },
+        {
+          "text": "Ile dni przed maturą odbywa się studniówka (w teorii)?",
+          "answers": ["50", "100", "150", "365"],
+          "correct": 1,
+          "time": 10
+        },
+        {
+          "text": "Który przedmiot jest obowiązkowy na maturze?",
+          "answers": ["Biologia", "Matematyka", "Chemia", "WOS"],
+          "correct": 1,
+          "time": 15
+        }
+      ]
+    }
+  ],
+  "polls": [
+    {
+      "id": "plebiscyt-klasa",
+      "title": "Plebiscyt klasowy",
+      "questions": [
+        { "text": "Kto najczęściej spóźnia się na pierwszą lekcję?", "options": [], "time": 30 },
+        { "text": "Kto zostanie milionerem?", "options": [], "time": 30 },
+        { "text": "Kto ma najlepsze wymówki?", "options": [], "time": 30 },
+        { "text": "Kto najlepiej tańczy poloneza?", "options": [], "time": 30 },
+        { "text": "Najlepszy przedmiot w liceum?", "options": ["Matematyka", "Polski", "WF", "Okienko"], "time": 20 }
+      ]
+    }
+  ]
+}

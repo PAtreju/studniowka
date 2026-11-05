@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Edytor treści – Studniówka</title>
+<link rel="stylesheet" href="editor.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-inner">
+    <h1>Edytor treści</h1>
+    <a class="back" href="/host">← Ekran prowadzącego</a>
+  </div>
+  <nav class="tabs" role="tablist" aria-label="Sekcje">
+    <button class="tab" role="tab" data-tab="class" aria-selected="true">Klasa</button>
+    <button class="tab" role="tab" data-tab="quizzes" aria-selected="false">Quizy</button>
+    <button class="tab" role="tab" data-tab="polls" aria-selected="false">Plebiscyty</button>
+  </nav>
+</header>
+
+<main id="app" class="app">
+  <p class="loading">Wczytywanie…</p>
+</main>
+
+<footer class="savebar">
+  <div class="savebar-inner">
+    <div class="status">
+      <span id="dirty" class="dirty" hidden>● Niezapisane zmiany</span>
+      <span id="msg" class="msg" role="status" aria-live="polite"></span>
+    </div>
+    <button id="save" class="btn primary" type="button" disabled>Zapisz</button>
+  </div>
+</footer>
+
+<div id="keyModal" class="modal" hidden>
+  <form id="keyForm" class="modal-box" autocomplete="off">
+    <h2>Klucz prowadzącego</h2>
+    <p id="keyHint" class="muted">Podaj klucz, aby edytować treści.</p>
+    <input id="keyInput" type="password" placeholder="Klucz prowadzącego" aria-label="Klucz prowadzącego" required>
+    <button class="btn primary" type="submit">Zatwierdź</button>
+  </form>
+</div>
+
+<script src="editor.js"></script>
+</body>
+</html>
