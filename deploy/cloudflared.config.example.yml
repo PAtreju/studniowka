@@ -1,0 +1,8 @@
+tunnel: studniowka
+credentials-file: /etc/cloudflared/credentials.json
+ingress:
+  - hostname: studniowka.shroomdev.pl
+    service: http://gameshow:3000
+  - hostname: rsvp.shroomdev.pl
+    service: http://rsvp:3001
+  - service: http_status:404

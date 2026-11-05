@@ -1,0 +1,30 @@
+# Stos studniówkowy: teleturniej + RSVP + własny tunel Cloudflare (bez otwartych portów).
+name: studniowka
+
+services:
+  gameshow:
+    build: ..
+    restart: unless-stopped
+    environment:
+      HOST_KEY: ${HOST_KEY:?ustaw HOST_KEY w .env}
+      PUBLIC_URL: https://studniowka.shroomdev.pl/
+    volumes:
+      - ./data/gameshow:/app/data
+
+  rsvp:
+    build: ../rsvp
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATA_DIR: /app/data
+      PUBLIC_BASE_URL: https://rsvp.shroomdev.pl
+    volumes:
+      - ./data/rsvp:/app/data
+
+  tunnel:
+    image: cloudflare/cloudflared:2026.10.4
+    restart: unless-stopped
+    command: tunnel --no-autoupdate --config /etc/cloudflared/config.yml run
+    volumes:
+      - ./cloudflared:/etc/cloudflared:ro
+    depends_on: [gameshow, rsvp]

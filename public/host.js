@@ -112,13 +112,13 @@ function updateNextButton() {
   $('#hint').classList.toggle('hidden', s.phase === 'idle');
   const last = s.question && s.question.index + 1 >= s.question.total;
   const labels = {
-    lobby: 'Start ▶',
-    question: 'Zakończ czas ⏹',
-    reveal: s.mode === 'quiz' ? 'Ranking →' : last ? 'Podsumowanie 🏆' : 'Następne pytanie →',
-    leaderboard: last ? 'Wyniki końcowe 🏆' : 'Następne pytanie →',
-    final: 'Zakończ ✓',
+    lobby: 'Start',
+    question: 'Zakończ czas',
+    reveal: s.mode === 'quiz' ? 'Ranking' : last ? 'Podsumowanie' : 'Następne pytanie',
+    leaderboard: last ? 'Wyniki końcowe' : 'Następne pytanie',
+    final: 'Zakończ',
   };
-  b.textContent = labels[s.phase] || 'Dalej →';
+  b.textContent = labels[s.phase] || 'Dalej';
   b.disabled = s.phase === 'lobby' && s.connectedCount === 0;
 }
 
@@ -140,7 +140,7 @@ function update(s) {
   if (chips) {
     const ps = s.players.filter((p) => p.connected);
     chips.innerHTML = ps.length
-      ? ps.map((p) => `<button class="chip pop" data-kick="${esc(p.id)}" data-name="${esc(p.name)}" title="Kliknij, aby usunąć">${esc(p.name)}</button>`).join('')
+      ? ps.map((p) => `<button class="chip" data-kick="${esc(p.id)}" data-name="${esc(p.name)}" title="Kliknij, aby usunąć">${esc(p.name)}</button>`).join('')
       : '<p class="muted">Czekamy na pierwszych graczy…</p>';
   }
   const cnt = $('#idleCount');
@@ -154,39 +154,43 @@ function qrBlock(big) {
     <div class="join-url">${esc(join.url.replace(/^https?:\/\//, '').replace(/\/$/, ''))}</div>`;
 }
 
+function countWord(n) {
+  return n === 1 ? 'pytanie' : n < 5 ? 'pytania' : 'pytań';
+}
+
 function renderIdle() {
-  const card = (g, type) => `
-    <button class="game-card ${type}" data-select="${esc(g.id)}" data-type="${type}">
-      <span class="game-kind">${type === 'quiz' ? '⚡ Quiz na czas' : '🗳️ Plebiscyt'}</span>
+  const row = (g, type) => `
+    <li><button class="game-row" data-select="${esc(g.id)}" data-type="${type}">
       <span class="game-title">${esc(g.title)}</span>
-      <span class="muted">${g.count} ${g.count === 1 ? 'pytanie' : g.count < 5 ? 'pytania' : 'pytań'}</span>
-    </button>`;
+      <span class="game-count">${g.count} ${countWord(g.count)}</span>
+    </button></li>`;
+  const list = (arr, type, none) => (arr.length ? `<ul class="games">${arr.map((g) => row(g, type)).join('')}</ul>` : `<p class="muted">${none}</p>`);
   return `
-  <section class="idle rise">
+  <section class="idle">
     <div class="join-panel">
-      <h2>Zeskanuj i dołącz!</h2>
+      <h2>Zeskanuj i dołącz</h2>
       ${qrBlock(false)}
       <p class="muted">W grze: <b id="idleCount">0</b></p>
     </div>
     <div class="menu">
       <h1 class="hero">Wybierz grę</h1>
-      <h3>Quizy</h3>
-      <div class="cards">${games.quizzes.map((g) => card(g, 'quiz')).join('') || '<p class="muted">Brak quizów.</p>'}</div>
-      <h3>Plebiscyty</h3>
-      <div class="cards">${games.polls.map((g) => card(g, 'poll')).join('') || '<p class="muted">Brak plebiscytów.</p>'}</div>
-      <p><a class="link" href="/editor" target="_blank">✏️ Edytuj pytania i listę klasy</a></p>
+      <h2 class="group">Quizy na czas</h2>
+      ${list(games.quizzes, 'quiz', 'Brak quizów.')}
+      <h2 class="group">Plebiscyty klasowe</h2>
+      ${list(games.polls, 'poll', 'Brak plebiscytów.')}
+      <p><a class="link" href="/editor" target="_blank" rel="noopener">Edytuj pytania i listę klasy</a></p>
     </div>
   </section>`;
 }
 
 function renderLobby(s) {
   return `
-  <section class="lobby rise">
+  <section class="lobby">
     <div class="lobby-qr">
       ${qrBlock(true)}
     </div>
     <div class="lobby-info">
-      <span class="kind">${s.mode === 'quiz' ? '⚡ Quiz na czas' : '🗳️ Plebiscyt klasowy'}</span>
+      <p class="kind">${s.mode === 'quiz' ? 'Quiz na czas' : 'Plebiscyt klasowy'}</p>
       <h1 class="hero">${esc(s.title)}</h1>
       <p class="muted lead">Zeskanuj kod telefonem, wpisz swoje imię i czekaj na start.</p>
       <div id="chips" class="chips"></div>
@@ -196,8 +200,8 @@ function renderLobby(s) {
 
 function qHeader(s) {
   return `<div class="q-head">
-    <span class="pill">Pytanie ${s.question.index + 1} / ${s.question.total}</span>
-    ${s.phase === 'question' ? `<span id="answered" class="pill"></span>` : `<span class="pill">${s.reveal.total} ${s.mode === 'quiz' ? 'odpowiedzi' : 'głosów'}</span>`}
+    <span class="pill">Pytanie <b>${s.question.index + 1}</b> z ${s.question.total}</span>
+    ${s.phase === 'question' ? `<span id="answered" class="pill"></span>` : `<span class="pill"><b>${s.reveal.total}</b> ${s.mode === 'quiz' ? 'odpowiedzi' : 'głosów'}</span>`}
   </div>`;
 }
 
@@ -206,12 +210,11 @@ function renderQuestion(s) {
   let body;
   if (s.mode === 'quiz') {
     body = `<div class="options">${q.options
-      .map((o, i) => `<div class="option opt-${i} pop" style="animation-delay:${i * 80}ms"><span class="letter">${LETTERS[i]}</span><span>${esc(o)}</span></div>`)
+      .map((o, i) => `<div class="option opt-${i}"><span class="letter">${LETTERS[i]}</span><span>${esc(o)}</span></div>`)
       .join('')}</div>`;
   } else {
-    body = `<div class="vote-call pop">
-      <div class="big-emoji">📱</div>
-      <p>Głosujcie na telefonach!</p>
+    body = `<div class="vote-call">
+      <p>Głosujcie na telefonach</p>
       ${q.options.length <= 8 ? `<div class="chips center">${q.options.map((o) => `<span class="chip static">${esc(o)}</span>`).join('')}</div>` : ''}
     </div>`;
   }
@@ -219,7 +222,7 @@ function renderQuestion(s) {
   <section class="question">
     ${qHeader(s)}
     <div class="q-row">
-      <h1 class="q-text rise">${esc(q.text)}</h1>
+      <h1 class="q-text">${esc(q.text)}</h1>
       <div class="timer" style="--size:min(16vh,140px)"></div>
     </div>
     ${body}
@@ -248,25 +251,26 @@ function renderQuizReveal(s) {
   </section>`;
 }
 
+// Plebiscyt: nazwisko zwycięzcy i czerwona szarfa z kategorią (jedyny wystudiowany moment ruchu).
 function renderPollReveal(s) {
   const q = s.question;
   const r = s.reveal;
   const top = r.ranking.slice(0, 6);
   const max = Math.max(1, r.max);
-  const winner = r.winners.length
-    ? `<div class="winner pop">
-        <div class="crown">👑</div>
-        <div class="winner-name">${esc(namesList(r.winners))}</div>
-        <div class="muted">${r.max} ${r.max === 1 ? 'głos' : r.max < 5 ? 'głosy' : 'głosów'}${r.winners.length > 1 ? ' – remis!' : ''}</div>
-      </div>`
-    : `<div class="winner pop"><div class="winner-name muted">Nikt nie zagłosował 🤷</div></div>`;
+  const names = namesList(r.winners);
+  const votes = `${r.max} ${r.max === 1 ? 'głos' : r.max < 5 ? 'głosy' : 'głosów'}${r.winners.length > 1 ? ', remis' : ''}`;
   return `
-  <section class="question">
+  <section class="question poll-reveal">
     ${qHeader(s)}
-    <h1 class="q-text center">${esc(q.text)}</h1>
-    ${winner}
+    <div class="sash-stage">
+      ${r.winners.length
+        ? `<div class="winner-name${names.length > 18 ? ' long' : ''}">${esc(names)}</div>`
+        : `<div class="winner-name none">Nikt nie zagłosował</div>`}
+      <div class="sash-wrap"><div class="sash"><h1 class="sash-text">${esc(q.text)}</h1></div></div>
+      ${r.winners.length ? `<p class="winner-votes">${votes}</p>` : ''}
+    </div>
     <div class="ranking">${top
-      .map((x, i) => `<div class="rank-row rise" style="animation-delay:${300 + i * 90}ms">
+      .map((x) => `<div class="rank-row">
         <span class="rname">${esc(x.name)}</span>
         <span class="bar"><i style="width:${(x.votes / max) * 100}%"></i></span>
         <b>${x.votes}</b></div>`)
@@ -277,13 +281,13 @@ function renderPollReveal(s) {
 function renderLeaderboard(s) {
   return `
   <section class="board">
-    <h1 class="hero center">Ranking</h1>
+    <h1 class="hero">Ranking</h1>
     <ol class="lb">${s.leaderboard
-      .map((p, i) => `<li class="rise" style="animation-delay:${i * 70}ms">
+      .map((p) => `<li>
         <span class="lb-rank">${p.rank}</span>
         <span class="lb-name">${esc(p.name)} ${p.streak >= 3 ? `<span class="streak">🔥${p.streak}</span>` : ''}</span>
         <b class="lb-score">${p.score}</b></li>`)
-      .join('') || '<p class="muted center">Brak graczy</p>'}</ol>
+      .join('') || '<p class="muted">Brak graczy</p>'}</ol>
   </section>`;
 }
 
@@ -291,32 +295,33 @@ function renderQuizFinal(s) {
   const lb = s.leaderboard;
   const pod = [lb[1], lb[0], lb[2]];
   const place = ['second', 'first', 'third'];
-  const medal = ['🥈', '🥇', '🥉'];
+  const rest = lb.slice(3);
   return `
   <section class="final">
-    <h1 class="hero center">🏆 Zwycięzcy 🏆</h1>
-    <div class="podium">${pod
-      .map((p, i) => (p
-        ? `<div class="step ${place[i]} rise" style="animation-delay:${[600, 1200, 200][i]}ms">
-            <div class="medal">${medal[i]}</div>
-            <div class="pname">${esc(p.name)}</div>
-            <div class="pscore">${p.score} pkt</div>
-            <div class="block">${p.rank}</div>
-          </div>`
-        : '<div class="step empty"></div>'))
-      .join('')}</div>
-    ${lb.length > 3 ? `<ol class="lb small" start="4">${lb.slice(3).map((p) => `<li><span class="lb-rank">${p.rank}</span><span class="lb-name">${esc(p.name)}</span><b class="lb-score">${p.score}</b></li>`).join('')}</ol>` : ''}
+    <h1 class="hero center">Zwycięzcy</h1>
+    <div class="final-body ${rest.length ? '' : 'solo'}">
+      <div class="podium">${pod
+        .map((p, i) => (p
+          ? `<div class="step ${place[i]}">
+              <div class="pname">${esc(p.name)}</div>
+              <div class="pscore">${p.score} pkt</div>
+              <div class="block">${p.rank}</div>
+            </div>`
+          : '<div class="step empty"></div>'))
+        .join('')}</div>
+      ${rest.length ? `<ol class="lb small" start="4">${rest.map((p) => `<li><span class="lb-rank">${p.rank}</span><span class="lb-name">${esc(p.name)}</span><b class="lb-score">${p.score}</b></li>`).join('')}</ol>` : ''}
+    </div>
   </section>`;
 }
 
 function renderPollFinal(s) {
   return `
   <section class="final">
-    <h1 class="hero center">🏆 Wyniki plebiscytu</h1>
+    <h1 class="hero">Wyniki plebiscytu</h1>
     <div class="awards">${s.history
-      .map((h, i) => `<div class="award rise" style="animation-delay:${i * 120}ms">
-        <div class="muted">${esc(h.question)}</div>
-        <div class="award-name">${h.winners.length ? '👑 ' + esc(namesList(h.winners)) : '—'}</div>
+      .map((h) => `<div class="award">
+        <div class="award-q">${esc(h.question)}</div>
+        <div class="award-name">${h.winners.length ? esc(namesList(h.winners)) : 'Brak głosów'}</div>
         <div class="muted small">${h.votes} z ${h.total} głosów</div>
       </div>`)
       .join('')}</div>

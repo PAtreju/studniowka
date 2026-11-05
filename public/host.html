@@ -3,7 +3,9 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#2a0a14" />
   <title>Teleturniej – ekran</title>
+  <link rel="stylesheet" href="/fonts.css" />
   <link rel="stylesheet" href="/style.css" />
   <link rel="stylesheet" href="/host.css" />
 </head>
@@ -19,21 +21,21 @@
   </div>
 
   <header class="top">
-    <div class="brand">✨ <span id="topTitle">Teleturniej Studniówkowy</span></div>
+    <div class="brand"><span id="topTitle">Teleturniej Studniówkowy</span></div>
     <div class="top-right">
       <span id="joinSmall" class="join-small"></span>
-      <span class="pill">👥 <b id="playerCount">0</b></span>
+      <span class="pill">Na sali: <b id="playerCount">0</b></span>
     </div>
   </header>
 
   <main id="stage" class="stage"></main>
 
   <footer class="controls">
-    <button id="btnMenu" class="btn danger">⟲ Menu</button>
+    <button id="btnMenu" class="btn danger">Wróć do menu</button>
     <div class="spacer"></div>
-    <span id="hint" class="muted hint">Spacja / → = dalej</span>
-    <button id="btnFs" class="btn" title="Pełny ekran">⛶</button>
-    <button id="btnNext" class="btn primary">Dalej →</button>
+    <span id="hint" class="muted hint">Spacja lub strzałka w prawo: dalej</span>
+    <button id="btnFs" class="btn" title="Pełny ekran (klawisz F)">Pełny ekran</button>
+    <button id="btnNext" class="btn primary">Dalej</button>
   </footer>
 
   <div id="conn" class="conn hidden">Brak połączenia z serwerem…</div>

@@ -1,0 +1,8 @@
+node_modules
+rsvp
+private
+deploy
+test
+.git
+.claude
+*.log

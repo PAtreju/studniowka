@@ -2,3 +2,7 @@ node_modules/
 .DS_Store
 *.log
 data/*.tmp
+private/
+deploy/.env
+deploy/data/
+deploy/cloudflared/

@@ -115,6 +115,7 @@ const pub = path.join(__dirname, 'public');
 app.get('/', (_req, res) => res.sendFile(path.join(pub, 'play.html')));
 app.get('/host', (_req, res) => res.sendFile(path.join(pub, 'host.html')));
 app.get('/editor', (_req, res) => res.sendFile(path.join(pub, 'editor.html')));
+app.use('/fonts', express.static(path.join(__dirname, 'node_modules', '@fontsource')));
 app.use(express.static(pub, { index: false }));
 
 const keyOk = (k) => typeof k === 'string' && k.length === HOST_KEY.length && crypto.timingSafeEqual(Buffer.from(k), Buffer.from(HOST_KEY));
