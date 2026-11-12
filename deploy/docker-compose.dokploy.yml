@@ -1,0 +1,40 @@
+# Wariant dla Dokploy: wolumeny nazwane zamiast bind-mountow, sekrety przez ${VAR}.
+name: studniowka
+
+services:
+  gameshow:
+    build: ..
+    restart: unless-stopped
+    environment:
+      HOST_KEY: ${HOST_KEY}
+      PUBLIC_URL: https://studniowka.shroomdev.pl/
+    volumes:
+      - gameshow-data:/app/data
+
+  rsvp:
+    build: ../rsvp
+    restart: unless-stopped
+    environment:
+      HOST_KEY: ${HOST_KEY}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID}
+      GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET}
+      MAIL_TRANSPORT: ${MAIL_TRANSPORT}
+      DATA_DIR: /app/data
+      PUBLIC_BASE_URL: https://rsvp.shroomdev.pl
+      TRUST_PROXY: uniquelocal
+    volumes:
+      - rsvp-data:/app/data
+
+  tunnel:
+    image: cloudflare/cloudflared:2026.10.4
+    restart: unless-stopped
+    command: tunnel --no-autoupdate --config /etc/cloudflared/config.yml run
+    volumes:
+      - cloudflared:/etc/cloudflared:ro
+    depends_on: [gameshow, rsvp]
+
+volumes:
+  gameshow-data:
+  rsvp-data:
+  cloudflared:
