@@ -2,7 +2,35 @@
   'use strict';
   var app = document.getElementById('app');
   var toastEl = document.getElementById('toast');
-  var state = { data: null, tab: 'guests', filter: 'all', q: '' };
+  var state = { data: null, tab: 'guests', filter: 'all', q: '', sort: { key: null, dir: 1 } };
+  var COLS = [
+    { key: 'name', label: 'Gość' },
+    { key: 'status', label: 'Status' },
+    { key: 'plus', label: 'Osoba towarzysząca' },
+    { key: 'message', label: 'Wiadomość' },
+    { key: 'respondedAt', label: 'Odpowiedź' },
+    { key: 'openedAt', label: 'Link otwarty' },
+  ];
+  var collator = new Intl.Collator('pl', { sensitivity: 'base', numeric: true });
+  function sortVal(g, key) {
+    if (key === 'status') return { yes: 0, pending: 1, no: 2 }[g.status];
+    if (key === 'plus') return !g.plusOneAllowed ? 3 : g.plusOne ? (g.plusOneName ? 0 : 1) : 2;
+    if (key === 'respondedAt' || key === 'openedAt') return g[key] ? Date.parse(g[key]) : null;
+    if (key === 'name') { var w = (g.name || '').trim().split(/\s+/); return w.length > 1 ? w[w.length - 1] + ' ' + w.slice(0, -1).join(' ') : w[0]; }
+    return g[key] || null;
+  }
+  function sortGuests(gs) {
+    var k = state.sort.key, d = state.sort.dir;
+    if (!k) return gs;
+    return gs.slice().sort(function (a, b) {
+      var x = sortVal(a, k), y = sortVal(b, k);
+      if (x == null && y == null) return collator.compare(a.name, b.name);
+      if (x == null) return 1;
+      if (y == null) return -1;
+      var c = typeof x === 'string' ? collator.compare(x, y) : x - y;
+      return c * d || collator.compare(a.name, b.name);
+    });
+  }
   var toastTimer;
 
   function el(tag, attrs, kids) {
@@ -135,7 +163,15 @@
       return el('option', { value: o[0], text: o[1], selected: state.filter === o[0] });
     }));
     q.addEventListener('input', function () { state.q = q.value; list(); });
-    main.appendChild(el('div', { class: 'tools' }, [el('div', { class: 'grow' }, [field('Szukaj', q)]), el('div', { class: 'sel' }, [field('Pokaż', sel)])]));
+    var sortOpts = [['', 'Kolejność dodania']];
+    COLS.forEach(function (c) { sortOpts.push([c.key + ':1', c.label + ' rosnąco'], [c.key + ':-1', c.label + ' malejąco']); });
+    var sortSel = el('select', { id: 'srt', onchange: function () {
+      var v = sortSel.value.split(':');
+      state.sort = { key: v[0] || null, dir: Number(v[1]) || 1 }; list();
+    } }, sortOpts.map(function (o) { return el('option', { value: o[0], text: o[1] }); }));
+    function syncSortSel() { sortSel.value = state.sort.key ? state.sort.key + ':' + state.sort.dir : ''; }
+    syncSortSel();
+    main.appendChild(el('div', { class: 'tools' }, [el('div', { class: 'grow' }, [field('Szukaj', q)]), el('div', { class: 'sel' }, [field('Pokaż', sel)]), el('div', { class: 'sel sort-m' }, [field('Sortuj', sortSel)])]));
     var holder = el('div');
     main.appendChild(holder);
     list();
@@ -147,10 +183,24 @@
         return (state.filter === 'all' || g.status === state.filter) && (!needle || (g.name + ' ' + g.email).toLowerCase().indexOf(needle) >= 0);
       });
       if (!gs.length) { holder.appendChild(el('p', { class: 'empty', text: state.data.guests.length ? 'Nikt nie pasuje do tego filtra.' : 'Lista jest pusta. Dodaj pierwszego gościa powyżej.' })); return; }
+      gs = sortGuests(gs);
+      syncSortSel();
       var tbody = el('tbody');
       gs.forEach(function (g) { tbody.appendChild(row(g)); });
+      var heads = COLS.map(function (c) {
+        var on = state.sort.key === c.key;
+        return el('th', { 'aria-sort': on ? (state.sort.dir > 0 ? 'ascending' : 'descending') : 'none' }, [
+          el('button', { type: 'button', class: 'th-sort' + (on ? ' on' : ''), title: c.key === 'name' ? 'Sortuj po nazwisku' : 'Sortuj: ' + c.label, onclick: function () {
+            if (!on) state.sort = { key: c.key, dir: 1 };
+            else if (state.sort.dir > 0) state.sort = { key: c.key, dir: -1 };
+            else state.sort = { key: null, dir: 1 };
+            list();
+          } }, [c.label, el('span', { class: 'arr', 'aria-hidden': 'true', text: on ? (state.sort.dir > 0 ? '▲' : '▼') : '↕' })]),
+        ]);
+      });
+      heads.push(el('th', { text: 'Działania' }));
       holder.appendChild(el('table', {}, [
-        el('thead', {}, [el('tr', {}, ['Gość', 'Status', 'Osoba towarzysząca', 'Wiadomość', 'Odpowiedź', 'Link otwarty', 'Działania'].map(function (h) { return el('th', { text: h }); }))]),
+        el('thead', {}, [el('tr', {}, heads)]),
         tbody,
       ]));
     }

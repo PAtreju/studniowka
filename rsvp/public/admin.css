@@ -103,6 +103,13 @@ dialog .row-end { display: flex; gap: 10px; justify-content: flex-end; margin-to
 @media (min-width: 720px) {
   .add { grid-template-columns: 1.2fr 1.2fr auto auto; align-items: end; }
 }
+th[aria-sort] { padding: 0; }
+.th-sort { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 6px; width: 100%; padding: 8px 10px; cursor: pointer; color: inherit; font: inherit; }
+.th-sort:hover, .th-sort.on { color: var(--champagne); }
+.th-sort:focus-visible { outline: 2px solid var(--champagne); outline-offset: -2px; }
+.th-sort .arr { font-size: 10px; opacity: .55; }
+.th-sort.on .arr { opacity: 1; }
+@media (min-width: 860px) { .sort-m { display: none; } }
 @media (max-width: 859px) {
   table, thead, tbody, tr, td { display: block; }
   thead { position: absolute; left: -9999px; }
